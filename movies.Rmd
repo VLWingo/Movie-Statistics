@@ -1,0 +1,281 @@
+---
+title: "Movie Statistics"
+author: "Victoria Wingo"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    css: styles.css
+    toc: true
+    toc_float: true
+    collapse: true
+params:
+  year: 2019
+---
+
+```{r data, include = FALSE}
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(readr)
+library(DataCombine)
+library(tidyverse)
+library(knitr)
+Highest_Hollywood_Grossing_Movies <- read.csv("Highest Hollywood Grossing Movies.csv")
+```
+
+# Datasets
+
+## Movies
+
+The `movies` dataset serves as a corrected version of the original dataset `Highest_Hollywood_Grossing_Movies` taken from kaggle, covering Hollywood films through 2021. Missing data has been added manually and the variable `runtime` has been converted from the 00h 00m format to minutes.
+
+```{r movies, include = FALSE}
+movies <- Highest_Hollywood_Grossing_Movies %>% 
+  mutate(
+    world_sales_mil = world_sales_dollars / 1000000, 
+    release_year = format(as.Date(release_date, format="%B %d, %Y"),"%Y")) %>%
+  select(-domestic_sales_dollars, -international_sales_dollars, -world_sales_dollars) %>%
+  data.frame()
+
+#replace original runtime format with minutes
+split_run <- str_split(movies$runtime, " ")
+run_ind <- 1
+for(t in split_run){
+  str_split(t, " ")
+  # either hours or minutes missing
+  if (length(t) == 2){
+    if (t[2] == "min"){
+      hr <- 0
+      min <- as.integer(t[1])
+    }
+    else{
+    hr <- as.integer(t[1])
+    min <- 0      
+    }
+  }
+  else{
+    hr <- as.integer(t[1])
+    min <- as.integer(t[3])
+  }
+  time <- (hr * 60) + min
+  movies$runtime[run_ind] <- time
+  run_ind <- run_ind + 1
+}
+movies$runtime <- as.integer(movies$runtime)
+```
+
+## Average Sales by Runtimes
+
+```{r by_runtime, echo = FALSE, message = FALSE, fig.cap = "Fig. 1.1 On average, a longer movie will see more sales than a shorter movie, but sales become less predictable with longer movies."}
+by_runtime <- movies %>% 
+  group_by(runtime) %>% 
+  summarize(avgSales = mean(world_sales_mil))
+ggplot(by_runtime, 
+       aes(x = runtime,
+           y = avgSales)) + 
+  geom_point() + 
+  geom_smooth() + 
+  labs(x = "Runtime (in minutes)", 
+       y = "Average Sales (in millions USD)") + 
+  scale_y_continuous(breaks = seq(from = 0, 
+                                  to = (max(by_runtime$avgSales) + 50), 
+                                  by = 200)) + 
+  scale_x_continuous(breaks = seq(from = 0, 
+                                  to = (max(by_runtime$runtime) + 30), 
+                                  by = 30))
+```
+
+## Average Sales by License
+
+```{r sales_by_license, echo = FALSE, fig.cap = "Fig. 2.1 On average, PG-13 movies sees more sales, while PG and G movies see about the same amount of sales."}
+sales_by_license <- movies %>% 
+  group_by(license) %>% 
+  summarize(avgSales = mean(world_sales_mil))
+ggplot(sales_by_license, 
+       aes(x = license, 
+           y = avgSales, 
+           fill = license)) + 
+  geom_col() + 
+  guides(fill = "none") + 
+  labs(x = "License", 
+       y = "Average Sales (in millions USD)")
+```
+
+## Average Runtimes by License
+
+```{r by_license, echo = FALSE, fig.cap = "Fig. 3.1 On average, PG-13 and R rated movies have about the same runtime."}
+ggplot(movies, 
+       aes(x = license, 
+           y = runtime, 
+           fill = license), 
+       alpha = 0.6) + 
+  geom_boxplot() + 
+  guides(fill = "none") + 
+  labs(x = "License", 
+       y = "Runtime (in minutes)")
+```
+
+## Average Sales by Release Year
+
+```{r by_year, echo = FALSE, fig.cap = "Fig. 4.1 From its early years through the 80's, average sales were less predictable, with 2020-2021 seeing a downturn due to the COVID pandemic."}
+by_year <- movies %>% 
+  group_by(release_year) %>% 
+  summarize(avgSales = mean(world_sales_mil))
+ggplot(by_year, 
+       aes(x = release_year,
+           y = avgSales)) + 
+  geom_point() + 
+  labs(x = "Year", 
+       y = "Average Sales (in millions)") + 
+  geom_text(data = subset(by_year, avgSales > 500 | avgSales <200), 
+            aes(label = release_year, 
+                hjust = 1.15, 
+                vjust = -.5), 
+            size = 3, 
+            check_overlap = TRUE) + 
+  scale_x_discrete(drop = FALSE,
+                   expand = expansion(add = 3), 
+                   breaks = seq(from = 1930, 
+                                to = 2025,
+                                by = 10)) + 
+  scale_y_continuous(expand = expansion(mult = c(.1, .15)), 
+                     breaks = seq(from = 0,
+                                  to = (max(by_year$avgSales) * 1.15),
+                                  by = 50))
+
+movies %>% 
+  filter(release_year == 1977) %>% 
+  select(title, 
+         release_date, 
+         world_sales_mil, 
+         license, runtime) %>% 
+  kable(caption = "Fig. 4.2 Movies from 1977")
+
+movies %>% 
+  filter(release_year == 1980) %>% 
+  select(title, release_date, world_sales_mil, license, runtime) %>% 
+  kable(caption="Fig. 4.3 Movies from 1980")
+
+movies %>% 
+  filter(release_year == 2015 & world_sales_mil > 500) %>% 
+  select(title, 
+         release_date, 
+         world_sales_mil, 
+         license, 
+         runtime) %>% 
+  arrange(world_sales_mil) %>% 
+  kable(caption = "Fig. 4.4 Movies from 2015 with world sales above 500 million USD")
+```
+
+## Movies with the Most World Sales of Their Year
+```{r most_sales, echo = FALSE, warning = FALSE, fig.cap = "Fig. 5.1 These movies had the most sales of their year, showing a strong showing for superhero movies in the past 10 years."}
+most_sales <- movies %>% 
+  group_by(release_year) %>% 
+  filter(world_sales_mil == max(world_sales_mil)) %>% 
+  select(title, 
+         release_year, 
+         distributor,
+         world_sales_mil) %>%
+  arrange(desc(world_sales_mil))
+ggplot(most_sales,
+       aes(x = release_year,
+           y = world_sales_mil)) +
+  geom_point() +
+  geom_text_repel(aes(label = title),
+            size = 3,
+            segment.color = "grey50",
+            max.overlaps = 5) +
+  scale_x_discrete(name = "Year",
+                   breaks = seq(from = 1930,
+                                to = 2030,
+                                by = 10)) +
+  scale_y_continuous(name = "World Sales (in millions USD)")
+  
+most_sales %>% 
+  head(10) %>% 
+  kable(caption = "Fig. 5.2 A table showing the 10 top films of their year.")
+```
+Note that 9 out of 10 of the films in Fig. 5.2 were released after 2009. Not only that, 6 were distributed by Walt Disney Studios. Twentieth Century Fox is now owned by Disney and will release sequels for the top-spot film "Avatar." While the film 'Spider-Man: No Way Home' was distributed by Sony, they used Marvel Studios, also owned by Disney.
+
+## Sales for Covid (2020-2022)
+
+```{r annual_sale, echo = FALSE, warning = FALSE, fig.cap="Fig. 6.1 Due to COVID-19, movie sales came to a halt in March 2020 as many countries went into lockdown."}
+annual_sale <- movies %>% 
+  filter(release_year %in% c(2020,2021,2022))
+ggplot(annual_sale, 
+       aes(x = as.Date(release_date, format="%B %d, %Y"), 
+           y = world_sales_mil, 
+           color = runtime)) + 
+  geom_point() + 
+  geom_text_repel(aes(label = title),
+                  size = 3, 
+                  segment.color = 'grey50', 
+                  max.overlaps = 5) + 
+  scale_x_date(name = "Date", 
+               date_breaks = "3 months", 
+               date_labels = "%b %Y") + 
+  scale_y_continuous(name = "World Sales (in millions USD)")
+```
+
+## Sales in `r params$year`
+
+```{r param_sale, echo = FALSE, warning = FALSE, fig.cap = paste("Fig. 7.1 A view of high-grossing movies in", params$year)}
+param_sale <- movies %>% 
+  filter(release_year == params$year)
+ggplot(param_sale, 
+       aes(x = as.Date(release_date, 
+                       format = "%B %d, %Y"), 
+           y = world_sales_mil)) + 
+  geom_point() + 
+  labs(x = "Date", y = "World sales (in millions USD)") + 
+  geom_text_repel(data = subset(param_sale, world_sales_mil > 1000),
+            aes(label = title),
+            size = 3,
+            segment.color = 'grey50',
+            max.overlaps = 10) +
+  scale_x_date(expand = expansion(mult = 0.15), 
+               date_breaks = "3 months", 
+               date_labels = "%b %Y") +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)),
+                     breaks = seq(from = 0, 
+                                  to = (max(param_sale$world_sales_mil) + 100), 
+                                  by = 200))
+param_sale %>% 
+  filter(world_sales_mil > 500) %>% 
+  select(title, release_date, world_sales_mil, license, runtime) %>% 
+  arrange(world_sales_mil) %>% 
+  kable(caption = paste("Fig. 7.2 Movies in", params$year, "with world sales above 500 million USD"))
+```
+
+## Sales by Distributor
+```{r distributor_sales, echo = FALSE, message = FALSE, fig.width = 8, fig.height = 8, fig.cap = "Fig. 8.1 Total world sales per year by the top 5 distributors for 2000 - present"}
+top_5 <- movies %>%
+  group_by(distributor) %>%
+  summarize(total_sales = sum(world_sales_mil)) %>%
+  arrange(desc(total_sales)) %>%
+  head(5) %>%
+  pull(distributor)
+distributor_sales <- movies %>%
+  filter(distributor %in% top_5 & release_year > 2000) %>%
+  group_by(distributor, release_year) %>%
+  summarize(total_sales = sum(world_sales_mil))
+ggplot(distributor_sales,
+       aes(x = release_year,
+           y = total_sales,
+           group = distributor,
+           color = distributor)) +
+  geom_line() +
+  labs(x = "Year",
+       y = "Total World Sales (in millions USD per year") +
+  guides(color = "none") +
+  scale_x_discrete(expand = expansion(mult = 0.1),
+                   breaks = seq(from = 2000,
+                                to = 2030,
+                                by = 5)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)),
+                     breaks = seq(from = 0, 
+                                  to = (max(distributor_sales$total_sales) + 100), 
+                                  by = 500)) +
+  facet_wrap(~distributor,
+             nrow = 2)
+```

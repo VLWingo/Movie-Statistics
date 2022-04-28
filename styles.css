@@ -1,0 +1,33 @@
+h1.title {
+  color: #708090;
+  background-color: #F5F5F5;
+  font-family: Calibri;
+  font-size: 36px;
+}
+h4.author{
+  color: #708090;
+  opacity: 0.6;
+  font-family: Calibri;
+  font-size: 18px;
+}
+h4.date{
+  color: #708090;
+  opacity: 0.6;
+  font-family: Calibri;
+  font-size: 16px;
+}
+#TOC {
+  color: #708090;
+  font-family: Calibri;
+  font-size: 16px;
+  border-color: #708090;
+}
+body {
+  color: #708090;
+  font-family: Calibri;
+  background-color: #F5F5F5
+}
+pre {
+  color: #708090;
+  background-color: #F8F8FF;
+}
